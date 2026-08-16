@@ -1,39 +1,45 @@
 import type { Metadata } from 'next';
-import { Inter, Manrope, JetBrains_Mono } from 'next/font/google';
+import { Cormorant_Garamond, Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 
-const inter = Inter({
+const geist = Geist({
   subsets: ['latin'],
   variable: '--font-body',
+  display: 'swap',
 });
 
-const manrope = Manrope({
+const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
   variable: '--font-headline',
+  weight: ['600', '700'],
+  display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const geistMono = Geist_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'Auditor Precision | O Estagiário',
-  description: 'Plataforma de auditoria e estruturação de dados fiscais XML.',
+  title: 'Apuração Assistida XML | Consultor do Agro',
+  description: 'Leitura, validação e análise assistida de documentos fiscais XML para o agronegócio.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} ${manrope.variable} ${jetbrainsMono.variable}`}>
-      <body className="bg-surface text-on-surface font-body antialiased flex min-h-screen" suppressHydrationWarning>
-        <Sidebar />
-        <div className="flex-1 ml-64 flex flex-col min-h-screen">
-          <Header />
-          <main className="flex-1 p-8">
-            {children}
-          </main>
+    <html lang="pt-BR" className={`${geist.variable} ${cormorant.variable} ${geistMono.variable}`}>
+      <body className="bg-surface text-on-surface font-body antialiased" suppressHydrationWarning>
+        <div className="app-shell">
+          <Sidebar />
+          <div className="app-content">
+            <Header />
+            <main className="app-main">
+              {children}
+            </main>
+          </div>
         </div>
       </body>
     </html>
