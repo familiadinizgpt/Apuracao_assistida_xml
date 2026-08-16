@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { UploadCloud, FolderOpen, FileCheck2, AlertCircle, Clock, FileText, RefreshCw, Shield, CheckSquare, Zap, Database } from 'lucide-react';
 import JSZip from 'jszip';
 import { DocumentDetector } from '@/infrastructure/parsers/DocumentDetector';
 import { ParserFactory } from '@/infrastructure/parsers/ParserFactory';
 import { FiscalDocument, ParseResult } from '@/domain/models/FiscalDocument';
 import { useFiscalStore } from '@/application/store/useFiscalStore';
+import { useAccess } from '@/components/AccessProvider';
 
 interface UploadedFile {
   id: string;
@@ -20,13 +21,17 @@ interface UploadedFile {
 }
 
 export function UploadZone() {
+  const access = useAccess();
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [stats, setStats] = useState({ valid: 0, error: 0, processing: 0 });
+  const [processedXmlCount, setProcessedXmlCount] = useState(0);
+  const [limitError, setLimitError] = useState('');
   
   // Zustand Store Actions
   const addDocument = useFiscalStore(state => state.addDocument);
   const addLogs = useFiscalStore(state => state.addLogs);
+  const clearAll = useFiscalStore(state => state.clearAll);
 
   const processXml = async (xmlString: string, fileName: string): Promise<ParseResult> => {
     try {
@@ -55,7 +60,37 @@ export function UploadZone() {
   const handleFileUpload = async (fileList: FileList | null) => {
     if (!fileList) return;
 
-    const newFiles: UploadedFile[] = Array.from(fileList).map(f => ({
+    setLimitError('');
+    const selectedFiles = Array.from(fileList);
+    let incomingXmlCount = 0;
+
+    try {
+      for (const file of selectedFiles) {
+        if (file.name.toLowerCase().endsWith('.zip')) {
+          const zip = await JSZip.loadAsync(file);
+          incomingXmlCount += Object.values(zip.files).filter(
+            (entry) => !entry.dir && entry.name.toLowerCase().endsWith('.xml'),
+          ).length;
+        } else if (file.name.toLowerCase().endsWith('.xml')) {
+          incomingXmlCount += 1;
+        }
+      }
+    } catch {
+      setLimitError('Um dos arquivos ZIP não pôde ser lido. Revise o lote e tente novamente.');
+      return;
+    }
+
+    if (access.xmlLimit !== null && processedXmlCount + incomingXmlCount > access.xmlLimit) {
+      const remaining = Math.max(0, access.xmlLimit - processedXmlCount);
+      setLimitError(
+        `O lote contém ${incomingXmlCount} XML, mas seu plano permite mais ${remaining}. Divida o lote ou altere o plano.`,
+      );
+      return;
+    }
+
+    setProcessedXmlCount((current) => current + incomingXmlCount);
+
+    const newFiles: UploadedFile[] = selectedFiles.map(f => ({
       id: Math.random().toString(36).substring(7),
       name: f.name,
       size: f.size,
@@ -68,7 +103,7 @@ export function UploadZone() {
     setStats(s => ({ ...s, processing: s.processing + newFiles.length }));
 
     for (const fileObj of newFiles) {
-      const file = Array.from(fileList).find(f => f.name === fileObj.name);
+      const file = selectedFiles.find(f => f.name === fileObj.name);
       if (!file) continue;
 
       updateFileStatus(fileObj.id, 'PROCESSING');
@@ -117,26 +152,31 @@ export function UploadZone() {
     setFiles(prev => prev.map(f => f.id === id ? { ...f, status, result, errorMessage: errorMessage || f.errorMessage } : f));
   };
 
-  const onDragOver = useCallback((e: React.DragEvent) => {
+  const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
-  }, []);
+  };
 
-  const onDragLeave = useCallback((e: React.DragEvent) => {
+  const onDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-  }, []);
+  };
 
-  const onDrop = useCallback((e: React.DragEvent) => {
+  const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     handleFileUpload(e.dataTransfer.files);
-  }, []);
+  };
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
       {/* Dropzone Area */}
       <div className="xl:col-span-2 space-y-6">
+        <div className="plan-usage-banner">
+          <div><Shield size={18} /><span><strong>{access.label}</strong> · {processedXmlCount} XML processados nesta sessão</span></div>
+          <a href="https://consultordoagro.com.br/servicos/apuracao-assistida-xml">Ver ou alterar plano</a>
+        </div>
+        {limitError && <p className="upload-limit-error" role="alert"><AlertCircle size={18} /> {limitError}</p>}
         <label 
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
@@ -200,7 +240,7 @@ export function UploadZone() {
       <div className="bg-surface-container-low rounded-xl p-6 h-full flex flex-col gap-6 border border-outline-variant/10">
         <div className="flex items-center justify-between">
           <h4 className="font-headline font-bold text-on-surface">Uploads Recentes</h4>
-          <span className="text-[10px] font-bold text-primary cursor-pointer hover:underline" onClick={() => { setFiles([]); setStats({valid:0, error:0, processing:0}); }}>Limpar</span>
+          <button className="clear-upload-button" type="button" onClick={() => { setFiles([]); setStats({valid:0, error:0, processing:0}); setProcessedXmlCount(0); setLimitError(''); clearAll(); }}>Limpar</button>
         </div>
         
         <div className="space-y-4 overflow-y-auto max-h-[500px] no-scrollbar">
